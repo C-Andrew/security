@@ -1,0 +1,10 @@
+#!/usr/bin/env python
+
+# Suppress warnings about missing IPv6 route and tcpdump bin
+import logging
+logging.getLogger("scapy.loading").setLevel(logging.ERROR)
+logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
+
+from scapy.all import *
+
+print "Hello, world!"

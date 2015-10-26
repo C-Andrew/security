@@ -1,0 +1,7 @@
+#!/usr/bin/env racket
+#lang racket
+; The only pcap parsing library for Scheme does not work in Racket, and PLT Scheme can no longer
+; download packages from PLaneT.
+; Consequently, we do not recommend writing your IDS in Racket.
+; If you would like to use Scheme, consider using Chicken Scheme, which is supported.
+(write 'Hello-World)

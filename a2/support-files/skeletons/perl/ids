@@ -1,0 +1,4 @@
+#!/usr/bin/env perl
+use Net::Pcap;
+
+print "Hello, world!\n";
