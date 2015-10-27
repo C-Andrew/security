@@ -1,6 +1,0 @@
-#!/usr/bin/env php
-<?php
-	// There are no good pcap parsing libraries for PHP.
-	// We do not recommend writing your IDS in PHP for this reason.
-	echo "Hello, world!\n";
-?>

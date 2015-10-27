@@ -1,3 +1,0 @@
-#!/usr/bin/env node
-var pcap = require('pcap');
-console.log('Hello, world!');

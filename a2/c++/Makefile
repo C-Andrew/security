@@ -8,7 +8,7 @@ OBJECTS = $(patsubst %.cpp, %.o, $(wildcard *.cpp))
 default: all
 
 %.o: %.cpp $(HEADERS)
-	g++ -std=c++14 -c $< -o $@
+	g++ -c $< -o $@
 
 all: $(OBJECTS)
 	g++ $(OBJECTS) -lpcap -o ids

@@ -1,7 +1,0 @@
-#!/usr/bin/env ruby
-
-require 'packetfu'
-
-include PacketFu
-
-puts "Hello, world!"

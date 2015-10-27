@@ -1,5 +1,0 @@
-#!/usr/bin/env tclsh
-
-package require Pcap
-
-puts "Hello, world!"
