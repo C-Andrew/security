@@ -1,4 +1,4 @@
-#define debug true
+#define debug false
 
 #include <iostream>
 #include <map>
@@ -52,8 +52,9 @@ string charArrayToStr(const u_char arr[]){
     while(arr[i] != '\0'){
         if(arr[i] < 'a'){
             s += ".";
+        } else {
+            s += arr[i];            
         }
-        s += arr[i];
         i++;
     }
     return s;
@@ -92,9 +93,6 @@ int main(int argc, char* argv[]) {
     map<string, IP>::iterator sinkit;
     sinkholes = buildSinkholeMap();
 
-    if(debug){
-        printf("%s\n", pcap_filename.c_str());        
-    }
     // Create pcap structs
     char errbuff[PCAP_ERRBUF_SIZE];
     pcap_t * pcap = pcap_open_offline(pcap_filename.c_str(), errbuff);
