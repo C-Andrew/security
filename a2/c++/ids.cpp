@@ -60,6 +60,22 @@ string charArrayToStr(const u_char arr[]){
     return s;
 }
 
+int sizeOfDnsQuery(const u_char arr[]){
+    int numOfLabels = 1; // One for intial label
+    int i = 0;
+    string s;
+    while(arr[i] != '\0'){
+        if(arr[i] < 'a'){
+            s += ".";
+            numOfLabels++;
+        } else {
+            s += arr[i];            
+        }
+        i++;
+    }
+    return strlen(s.c_str()) + numOfLabels + 4;
+}
+
 map<string, IP> buildSinkholeMap(){
     string line;
     map<string, IP> m;
@@ -161,15 +177,14 @@ int main(int argc, char* argv[]) {
                 // Check if DNS is an Answer
                 if(DNS_QR(dns) == 1){
                     dns_query = (struct sniff_dns_query*)(data + SIZE_ETHERNET + size_ip + SIZE_UDP + SIZE_DNS);
-                    size_dns_query = dns_query->th_length + 2 + 4 + 4;
-
+                    string url = charArrayToStr(dns_query->th_name);
+                    size_dns_query = sizeOfDnsQuery(dns_query->th_name);
                     dns_answer = (struct sniff_dns_answer*)(data + SIZE_ETHERNET + size_ip + SIZE_UDP + SIZE_DNS + size_dns_query);
 
                     // Check RDATA in sinkhole map
                     struct in_addr ip_addr;
                     ip_addr.s_addr = dns_answer->th_address;
                     IP answer_ip = parseIPV4string(inet_ntoa(ip_addr));
-                    string url = charArrayToStr(dns_query->th_name).c_str();
                     // printf("DNS: %s\n", answer_ip.toString().c_str());
                     sinkit = sinkholes.find(answer_ip.toString());
                     if(sinkit != sinkholes.end()){
