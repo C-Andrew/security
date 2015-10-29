@@ -202,7 +202,7 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-    printf("Analyzed %d packets, %d bytes", packetCount, totalSize);
+    printf("Analyzed %d packets, %d bytes\n", packetCount, totalSize);
 
 
     return 0;
