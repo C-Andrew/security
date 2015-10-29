@@ -9,6 +9,8 @@ default: all
 
 %.o: %.cpp $(HEADERS)
 	g++ -c $< -o $@
+	# g++ -std=c++14 -c $< -o $@  
+	# Add this back to test on C++14
 
 all: $(OBJECTS)
 	g++ $(OBJECTS) -lpcap -o ids

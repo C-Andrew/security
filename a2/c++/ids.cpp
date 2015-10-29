@@ -1,73 +1,99 @@
 #define debug true
 
 #include <iostream>
+#include <map>
 #include <string>
-#include <sstream>   
+#include <sstream>
+#include <fstream>
 #include <pcap.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include "sniff_ethernet.h"
 
-uint32_t NETMASK_LOW = (10<<24) + (0<<16) + (0<<8) + (0);
-uint32_t NETMASK_HIGH = (10<<24) + (255<<16) + (255<<8) + (255);
-        
 using namespace std;
 
-class Packet_Info{
+class IP {
     public:
-        uint32_t src_ip;
-        uint32_t dst_ip;
-        string src_str;
-        string dst_str;
-        struct pcap_pkthdr *header;
-        Packet_Info(struct pcap_pkthdr *header, const u_char *data);
-        bool withinRange();
+    uint32_t a, b, c, d;
+    IP() : a(0), b(0), c(0), d(0){}
+    IP(int a, int b, int c, int d) : a(a), b(b), c(c), d(d){}
+    bool validIP();
+    string toString();
 } ;
 
-Packet_Info::Packet_Info(struct pcap_pkthdr *header, const u_char *data){
-    header = header;
-    stringstream ss;
-
-    src_ip = (data[26]<<24) + (data[27]<<16) + (data[28]<<8)+ (data[29]);
-    dst_ip = (data[30]<<24) + (data[31]<<16) + (data[32]<<8)+ (data[33]);
-    // src_ip = (10<<24) + (255<<16) + (255<<8)+ (255);
-    // dst_ip = (10<<24) + (155<<16) + (225<<8)+ (256);
-
-    ss << int(data[26]) << "." << int(data[27]) << "." << int(data[28]) <<  "." << int(data[29]);
-    src_str = ss.str();
-
-    ss.str("");
-    ss << int(data[30]) << "." << int(data[31]) << "." << int(data[32]) <<  "." << int(data[33]);
-    dst_str = ss.str();
-}
-
-bool Packet_Info::withinRange(){
+bool IP::validIP(){
     bool retval = false;
-    if( (src_ip & NETMASK_LOW) == (dst_ip & NETMASK_LOW)){
+    if( this->a == 10 ){
         retval = true;
     }
     return retval;
 }
 
-void print(string s){
-    cout << s << endl;
+string IP::toString(){
+    stringstream ss;
+    ss << this->a << "." << this->b << "." << this->c <<  "." << this->d;
+    return ss.str();
 }
 
-void getIpFromData(const u_char *data){  
-    for(int i = 0; i < 4; i++){
-        printf("%d ", data[30 + i]);
+IP parseIPV4string(string ipAddress) {
+    stringstream s(ipAddress);
+    int a,b,c,d;
+    char ch;
+    s >> a >> ch >> b >> ch >> c >> ch >> d;
+
+    return IP(a,b,c,d);
+}
+
+string charArrayToStr(const u_char arr[]){
+    int i = 0;
+    string s;
+    while(arr[i] != '\0'){
+        if(arr[i] < 'a'){
+            s += ".";
+        }
+        s += arr[i];
+        i++;
     }
-    printf("\n");
+    return s;
+}
+
+map<string, IP> buildSinkholeMap(){
+    string line;
+    map<string, IP> m;
+    ifstream myfile ("sinkholes.txt");
+    if (myfile.is_open())
+    {
+        while ( getline (myfile,line) )
+        {   
+            IP sinkhole_IP = parseIPV4string(line);
+            m.insert( pair<string, IP>(line, sinkhole_IP) );
+            // cout << line  << "=>" << sinkhole_IP.toString()<< '\n';
+        }
+        myfile.close();
+    }
+    else{
+        cout << "Unable to open file";
+    }
+
+    return m;
 }
 
 int main(int argc, char* argv[]) {
     
     // Clean up when done
-    string pcap_filename = "samples/q2-spoofed.pcap";
+    string pcap_filename = "samples/q4-sinkholes.pcap";
     if(argc >= 2){
         pcap_filename = argv[1];
     }
 
+    map<string, IP> sinkholes;
+    map<string, IP>::iterator sinkit;
+    sinkholes = buildSinkholeMap();
+
     if(debug){
-        print(pcap_filename);        
+        printf("%s\n", pcap_filename.c_str());        
     }
     // Create pcap structs
     char errbuff[PCAP_ERRBUF_SIZE];
@@ -82,39 +108,101 @@ int main(int argc, char* argv[]) {
     u_int totalSize = 0;
 
 
+    const struct sniff_ethernet *ethernet; /* The ethernet header */
+    const struct sniff_ip *ip; /* The IP header */
+    const struct sniff_tcp *tcp; /* The TCP header */
+    const struct sniff_udp *udp; /* The UDP header */
+    const struct sniff_dns *dns; /* The DNS header */
+    const struct sniff_dns_query *dns_query;
+    const struct sniff_dns_answer *dns_answer; /* The DNS Answer */
+    const u_char *payload; /* Packet payload */
+
+    u_int size_ip;
+    u_int size_tcp;
+    u_int size_payload;
+    u_int size_dns_query;
+
     while (int returnValue = pcap_next_ex(pcap, &header, &data) >= 0)
     {
         packetCount++;
         totalSize = totalSize + header->caplen;
-        Packet_Info info(header, data);
-        if(!info.withinRange()){
-            printf("[Spoofed IP address]: src:%s, dst:%s", info.src_str.c_str(), info.dst_str.c_str());
+
+
+        // Parse Data
+        // Ethernet Struct
+        ethernet = (struct sniff_ethernet*)(data);
+
+        // IP struct
+        ip = (struct sniff_ip*)(data + SIZE_ETHERNET);
+        size_ip = IP_HL(ip)*4;
+
+        // Do Generic Packet Checks
+        IP ip_src = parseIPV4string(string(inet_ntoa(ip->ip_src)));
+        IP ip_dst = parseIPV4string(string(inet_ntoa(ip->ip_dst)));
+        // Spoofed
+        if(!ip_src.validIP() && !ip_dst.validIP()){
+            printf("[Spoofed IP address]: src:%s, dst:%s", ip_src.toString().c_str(), ip_dst.toString().c_str());
             printf("\n");
         }
 
-        // Show the packet number
-        // printf("Packet # %i\n", ++packetCount);
-        // Show the size in bytes of the packet
-        // printf("Packet size: %d bytes\n", header->len);
- 
-        // // Show a warning if the length captured is different
-        // if (header->len != header->caplen){
-        //     // printf("Warning! Capture size different than packet size: %ld bytes\n", header->len);
-        // }
- 
-        // // Show Epoch Time
-        // // printf("Epoch Time: %ld : %ld seconds\n", header->ts.tv_sec, header->ts.tv_usec);
- 
-        // // loop through the packet and print it as hexidecimal representations of octets
-        // // We also have a function that does this similarly below: PrintData()
-        // for (u_int i=0; (i < header->caplen ) ; i++)
-        // {
-        //     // Start printing on the next after every 16 octets
-        //     if ( (i % 16) == 0) printf("\n");
-        //     // Print each octet as hex (x), make sure there is always two characters (.2).
-        //     printf("%d ", data[i]);
-        // }
-        // // printf("\n\n");
+        // Parse IP-> UDP
+        if (ip->ip_p == 17) {
+            udp = (struct sniff_udp*)(data + SIZE_ETHERNET + size_ip);
+
+            payload = (u_char *)(data + SIZE_ETHERNET + size_ip + SIZE_UDP);
+            size_payload = ntohs(ip->ip_len) - (size_ip + SIZE_UDP);
+            if (size_payload > ntohs(udp->th_ulen)){
+                size_payload = ntohs(udp->th_ulen);
+            }
+
+            if(ntohs(udp->th_sport) == 53 || ntohs(udp->th_dport) == 53){
+                // Deal with DNS Requests
+                // Parse DNS for Question & Answer
+                dns = (struct sniff_dns*)(data + SIZE_ETHERNET + size_ip + SIZE_UDP);
+
+                // Check if DNS is an Answer
+                if(DNS_QR(dns) == 1){
+                    dns_query = (struct sniff_dns_query*)(data + SIZE_ETHERNET + size_ip + SIZE_UDP + SIZE_DNS);
+                    size_dns_query = dns_query->th_length + 2 + 4 + 4;
+
+                    dns_answer = (struct sniff_dns_answer*)(data + SIZE_ETHERNET + size_ip + SIZE_UDP + SIZE_DNS + size_dns_query);
+
+                    // Check RDATA in sinkhole map
+                    struct in_addr ip_addr;
+                    ip_addr.s_addr = dns_answer->th_address;
+                    IP answer_ip = parseIPV4string(inet_ntoa(ip_addr));
+                    string url = charArrayToStr(dns_query->th_name).c_str();
+                    // printf("DNS: %s\n", answer_ip.toString().c_str());
+                    sinkit = sinkholes.find(answer_ip.toString());
+                    if(sinkit != sinkholes.end()){
+                        printf("[Sinkhole lookup]: src:%s, host:%s, ip:%s\n",
+                         ip_dst.toString().c_str(), url.c_str() ,answer_ip.toString().c_str());
+                    }
+
+                }
+            }
+            // Do UDP
+        }
+        // Parse IP->TCP
+        if(ip->ip_p == 6){
+            tcp = (struct sniff_tcp*)(data + SIZE_ETHERNET + size_ip);
+            size_tcp = TH_OFF(tcp)*4;
+            payload = (u_char *)(data + SIZE_ETHERNET + size_ip + size_tcp);
+
+            // Do TCP Checks
+            // Servers
+            if(!ip_src.validIP() && ip_dst.validIP() && (tcp->th_flags & TH_SYN) ){
+                printf("[Attempted server connection]: rem:%s, srv:%s, port:%d", 
+                        ip_src.toString().c_str(), ip_dst.toString().c_str(), ntohs(tcp->th_dport));
+                printf("\n");
+            }
+
+            if(ip_src.validIP() && !ip_dst.validIP() && (tcp->th_flags & TH_ACK) ){
+                printf("[Accepted server connection]: rem:%s, srv:%s, port:%d", 
+                        ip_dst.toString().c_str(), ip_src.toString().c_str(), ntohs(tcp->th_sport));
+                printf("\n");
+            }
+        }
     }
     printf("Analyzed %d packets, %d bytes", packetCount, totalSize);
 
