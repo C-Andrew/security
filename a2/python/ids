@@ -1,0 +1,156 @@
+#!/usr/bin/env python
+
+import dpkt
+import datetime
+import socket
+import sys
+
+from uuid import getnode as get_mac
+
+
+def ip_to_str(address):
+    return socket.inet_ntop(socket.AF_INET, address)
+
+def ip_to_list(ip):
+    ip = ip_to_str(ip)
+    return ip.split(".")
+
+def validIP(ip):
+    ip = ip_to_list(ip)
+    if(int(ip[0]) == 10):
+        return True
+    return False
+
+def tcp_flags(flags):
+    ret = ''
+    if flags & dpkt.tcp.TH_FIN:
+        ret = ret + 'F'
+    if flags & dpkt.tcp.TH_SYN:
+        ret = ret + 'S'
+    if flags & dpkt.tcp.TH_RST:
+        ret = ret + 'R'
+    if flags & dpkt.tcp.TH_PUSH:
+        ret = ret + 'P'
+    if flags & dpkt.tcp.TH_ACK:
+        ret = ret + 'A'
+    if flags & dpkt.tcp.TH_URG:
+        ret = ret + 'U'
+    if flags & dpkt.tcp.TH_ECE:
+        ret = ret + 'E'
+    if flags & dpkt.tcp.TH_CWR:
+        ret = ret + 'C'
+
+    return ret    
+
+def ether_decode(p): 
+    s = ':'.join(['%02x' % ord(x) for x in str(p)])  
+    return s.upper()
+    # http://www.banquise.org/python/how-to-understand-the-arp-queries-and-replies-fields-with-pypcap
+
+def findUnicode(uri):
+    exploits = ["%255c", "%63", "%35", "%25", "%252f", "%%35c", "%%35", "%C1", "%C0", '%AF', '%c1', '%9v', '%c0', '%af', '%1C', '%1c', '%qf', '%8s', '%pc', '%9c', '%9C', '%e0', '%80', '%f0', '%f8', '%fc']
+    found = -1
+    for exploit in exploits:
+        found = uri.find(exploit, 0, len(uri))
+        if(found >= 0):
+            return True
+    return False
+
+
+pcap = dpkt.pcap.Reader(file(sys.argv[1], "rb"))
+
+packetCount = 0
+totalSize = 0
+unibad = 0
+
+# Parse sinkholes
+sinkholes_map = {}
+with open("sinkholes.txt", "r") as ins:
+    array = []
+    for line in ins:
+        line = line.splitlines()[0]
+        sinkholes_map[line] = line
+
+arp_map = {}
+
+
+for ts, buf in pcap:
+    # Parse Ethernet data
+    eth = dpkt.ethernet.Ethernet(buf)
+
+    # Anomalies counter
+    packetCount += 1
+    totalSize += len(buf)
+
+    # Parse IP data
+    if eth.type == dpkt.ethernet.ETH_TYPE_IP:
+        ip = eth.data
+
+        # Do Generic Packet Checks
+        if( not(validIP(ip.src)) and not(validIP(ip.dst)) ):
+            print "[Spoofed IP address]: src:{0}, dst:{1}".format( ip_to_str(ip.src), ip_to_str(ip.dst) )
+
+        # Parse TCP Data
+        if( ip.p == 6):
+            tcp = ip.data
+            if( not(validIP(ip.src)) and validIP(ip.dst) and (tcp_flags(tcp.flags) == 'S') ):
+                print "[Attempted server connection]: rem:{0}, srv:{1}, port:{2}".format( ip_to_str(ip.src), ip_to_str(ip.dst), tcp.dport)
+            if( validIP(ip.src) and not(validIP(ip.dst)) and (tcp_flags(tcp.flags) == 'SA') ):
+                print "[Accepted server connection]: rem:{0}, srv:{1}, port:{2}".format( ip_to_str(ip.dst), ip_to_str(ip.src), tcp.sport)
+
+            # Check dst port to see if it maybe a HTTP Request (Port: 80)
+            if(tcp.dport == 80 and len(tcp.data) > 0 and not(tcp_flags(tcp.flags) == 'S')):
+                http = dpkt.http.Request(tcp.data)
+                if(findUnicode(http.uri)):
+                    print "[Unicode IIS exploit]: src:{0}, dst:{1}".format(ip_to_str(ip.src), ip_to_str(ip.dst))
+                
+        # Parse UDP Data
+        if( ip.p == 17 ):
+            udp = ip.data
+            # Check if DNS request
+            if( udp.sport == 53 or udp.dport == 53):
+                dns = dpkt.dns.DNS(udp.data)
+                # If DNS Response
+                if( dns.qr == dpkt.dns.DNS_R):
+                    for answer in dns.an:
+                        # If response ip is from sinkhole
+                        if( answer.type == 1 and socket.inet_ntoa(answer.rdata) in sinkholes_map.keys() ):
+                            if answer.type == 1:
+                                print "[Sinkhole lookup]: src:{0}, host:{1}, ip:{2}".format( ip_to_str(ip.dst), answer.name, socket.inet_ntoa(answer.rdata)) 
+            elif( udp.dport == 123 ):
+                # If MON GETLIST 1 request
+                if( ord(udp.data[3]) == 42 ):
+                    print "[NTP DDoS]: vic:{0}, srv:{1}".format( ip_to_str(ip.src), ip_to_str(ip.dst) )
+
+
+    # Parse ARP Data
+    if eth.type == dpkt.ethernet.ETH_TYPE_ARP:
+        arp = eth.data
+        # If this is an ARP Response
+        if(arp.op == 2):
+            # Get senders mac and ip addr
+            # Check ARP table is values are the same
+            if( not(ip_to_str(arp.spa) in arp_map.keys()) ):
+                arp_map[ip_to_str(arp.spa)] = ether_decode(arp.sha)
+            elif( ip_to_str(arp.spa) in arp_map.keys() ):
+                if( arp_map[ip_to_str(arp.spa)] != ether_decode(arp.sha) ):
+                    print "[Potential ARP spoofing]: ip:{0}, old:{1}, new:{2}".format( ip_to_str(arp.spa), arp_map[ip_to_str(arp.spa)], ether_decode(arp.sha)) 
+                # Update the mapping anyways cuz YOLO
+                arp_map[ip_to_str(arp.spa)] = ether_decode(arp.sha)
+
+print "Analyzed {0} packets, {1} bytes".format(packetCount, totalSize)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
