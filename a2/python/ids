@@ -5,9 +5,6 @@ import datetime
 import socket
 import sys
 
-from uuid import getnode as get_mac
-
-
 def ip_to_str(address):
     return socket.inet_ntop(socket.AF_INET, address)
 
@@ -41,6 +38,7 @@ def tcp_flags(flags):
         ret = ret + 'C'
 
     return ret    
+    # https://bytes.com/topic/python/answers/944167-dpkt-parsing-pcap-file
 
 def ether_decode(p): 
     s = ':'.join(['%02x' % ord(x) for x in str(p)])  
@@ -93,8 +91,10 @@ for ts, buf in pcap:
         # Parse TCP Data
         if( ip.p == 6):
             tcp = ip.data
+            # If source outside of IP range and SYN
             if( not(validIP(ip.src)) and validIP(ip.dst) and (tcp_flags(tcp.flags) == 'S') ):
                 print "[Attempted server connection]: rem:{0}, srv:{1}, port:{2}".format( ip_to_str(ip.src), ip_to_str(ip.dst), tcp.dport)
+            # If destination outside of IP range and SYN/ACK
             if( validIP(ip.src) and not(validIP(ip.dst)) and (tcp_flags(tcp.flags) == 'SA') ):
                 print "[Accepted server connection]: rem:{0}, srv:{1}, port:{2}".format( ip_to_str(ip.dst), ip_to_str(ip.src), tcp.sport)
 
