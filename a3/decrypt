@@ -49,7 +49,7 @@ def last_word_oracle():
 
 	# Loop over cookie, specifically the ciphertext which is all after 1st block
 	#Skip first block which is IV
-	for i in range(1, 2): # numOfBlocks
+	for i in range(1, numOfBlocks): # numOfBlocks
 		# 16 byte array that will store IV
 		r = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 		key = bytearray(r)
@@ -86,7 +86,8 @@ def last_word_oracle():
 
 							# print r
 							# print oracle(bytearray(r) + y)
-							decrypt_block = block_decrypt_oracle(padding, r, y)
+							decrypt_block = block_decrypt_oracle(padding, r, y, (i == numOfBlocks-1) )
+							decoded_data += decrypt_block
 							break
 						else:
 							# We modified padding and it is now invalid
@@ -96,7 +97,9 @@ def last_word_oracle():
 					break
 			break
 
-def block_decrypt_oracle(padding, r, y):
+	print decoded_data
+
+def block_decrypt_oracle(padding, r, y, lastBlock):
 	inc = padding+1
 	for i in reversed(range(0, BLOCK_LEN-padding)):
 		r[BLOCK_LEN-1] ^= inc
@@ -109,10 +112,16 @@ def block_decrypt_oracle(padding, r, y):
 				# print i
 				# print r_byte
 				print "TRUE"
+				print r
 				r[BLOCK_LEN-1] ^= inc
 				inc += 1
 				break
-	print bytearray(r)
+
+	r[BLOCK_LEN-1] ^= inc-1
+	if not lastBlock:
+		r[BLOCK_LEN-1] = 15 ^ r[BLOCK_LEN-1]
+
+	print r
 	print "END OF BDO"
 	return r
 
