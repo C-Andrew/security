@@ -41,11 +41,9 @@ def modifyChar(index, str, newChar):
 
 
 def last_word_oracle():
-	s = base64.b64decode(COOKIE)
-	numOfBlocks = (len(COOKIE)/16) - 1
+	s = list(bytearray(base64.b64decode(COOKIE)))
+	numOfBlocks = (len(s)/16)
 	decoded_data = []
-
-	iv = s[0:16]
 
 	# Loop over cookie, specifically the ciphertext which is all after 1st block
 	#Skip first block which is IV
@@ -93,11 +91,12 @@ def last_word_oracle():
 							# We modified padding and it is now invalid
 							# Keep going
 							padding += 1
-							print "FAIL"
 					break
 			break
 
-	print decoded_data
+	# print decoded_data
+	decrypt_cookie(s, decoded_data)
+
 
 def block_decrypt_oracle(padding, r, y, lastBlock):
 	inc = padding+1
@@ -109,22 +108,27 @@ def block_decrypt_oracle(padding, r, y, lastBlock):
 
 			ry = bytearray(r) + y
 			if oracle(ry):
-				# print i
-				# print r_byte
-				print "TRUE"
-				print r
+				# print "TRUE"
 				r[BLOCK_LEN-1] ^= inc
-				inc += 1
+				if i != 0:
+					inc += 1
 				break
 
-	r[BLOCK_LEN-1] ^= inc-1
-	if not lastBlock:
-		r[BLOCK_LEN-1] = 15 ^ r[BLOCK_LEN-1]
-
-	print r
-	print "END OF BDO"
+	# Look at each intermediary block
+	# print r
 	return r
 
+def decrypt_cookie(decoded_cookie, decoded_data):
+	pt = []
+	for x in range(0, len(decoded_data)/16):
+		# Get x-th block cookie
+		c_block = decoded_cookie[16*x:(16*(x+1))]
+		r_block = decoded_data[16*x: (16*(x+1))]
+
+		for i in range(0, 16):
+			pt.append( r_block[i] ^ c_block[i] )
+
+	print ''.join(chr(c) for c in pt)
 
 
 
