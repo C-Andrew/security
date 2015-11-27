@@ -4,11 +4,13 @@ import base64
 import httplib2
 import os
 import sys
+import math 
 
 # Defaults
 BLOCK_LEN = 16
 URL = "http://ugster21.student.cs.uwaterloo.ca:4555/"
 # URL = "http://localhost:4555"
+# cookie = "38UNph4moFFIGSxwCXpQO38JqNfjCcwK2iqhzQGjogipGx1QaEpv4+mwrS5sr+gt+whL4kC6Z7Y4zJQ8ITjm0g=="
 
 h = httplib2.Http(".cache")
 # Cookie: an unencoded cookie
@@ -16,9 +18,10 @@ def GETwithCookie( cookie ):
 	cookie = base64.b64encode(cookie)
 	return h.request(URL, "GET", headers={ "Cookie" : "user=" + cookie })
 
-# Used to hit the ugster server for the first time
-def visitURL():
-	return h.request(URL, "GET")
+def debug(s):
+	sys.stderr.write(str(s))
+	if(s[len(s)-1] != '\n'):
+		sys.stderr.write('\n')
 
 # Check if unecnoded cookie provided has valid padding
 def oracle( cookie ):
@@ -28,12 +31,13 @@ def oracle( cookie ):
 	else:
 		return True
 
+# Take a cookie and return the intermediary values
 def last_word_oracle(COOKIE):
-	s = list(bytearray(base64.b64decode(COOKIE)))
+	s = COOKIE
 	numOfBlocks = (len(s)/16)
 	decoded_data = []
 
-	# Loop over cookie, specifically the ciphertext which is all after 1st block
+	# Loop over cookie, specifically the cipher text which is all after 1st block
 	#Skip first block which is IV
 	for i in range(1, numOfBlocks): # numOfBlocks
 		# 16 byte array that will store IV
@@ -41,10 +45,9 @@ def last_word_oracle(COOKIE):
 		key = bytearray(r)
 
 		y = bytearray( s[ (i*16) : (i+1)*16 ] )
-
 		for r_len in reversed( range(0, len(r)) ):
 			# print "Deal with next r[{0}]".format(r_len)
-			for r_byte in range(0, 256):
+			for r_byte in range(0, 255):
 				r[r_len] = r_byte
 
 				# Concat R|Y
@@ -83,7 +86,8 @@ def last_word_oracle(COOKIE):
 			break
 
 	# print decoded_data
-	decrypt_cookie(s, decoded_data)
+	return decoded_data
+	# decrypt_cookie(s, decoded_data)
 
 def block_decrypt_oracle(padding, r, y, lastBlock):
 	inc = padding+1
@@ -105,7 +109,7 @@ def block_decrypt_oracle(padding, r, y, lastBlock):
 	# print r
 	return r
 
-# Takes in the cookie/ciphertext (base64.decoded) and decoded data (intermediary value)
+# Takes in the cookie (base64.decoded) and decoded data (intermediary value
 def decrypt_cookie(decoded_cookie, decoded_data):
 	pt = []
 	for x in range(0, len(decoded_data)/16):
@@ -116,22 +120,68 @@ def decrypt_cookie(decoded_cookie, decoded_data):
 		for i in range(0, 16):
 			pt.append( r_block[i] ^ c_block[i] )
 
-	print pt
 	print ''.join(chr(c) for c in pt)
+
+def pad_plaintext(plaintext):
+	new_len = math.ceil( float(len(plaintext)) / 16)
+	
+	if (len(plaintext) % 16) == 0:
+		new_len += 1
+
+	pt = list(plaintext)
+	for i in range (len(plaintext), int(new_len * 16)):
+		pt.append(0)
+	pt[len(pt)-1] =  len(pt) - len(plaintext)
+
+	# print len(list(bytearray(pt)))
+	return list(bytearray(pt))
+	# return "".join(pt)
+
+def encrypt(plaintext):
+	padded_plain_text = pad_plaintext(plaintext)
+
+	# Create cipher text with one additional block for the IV 
+	cipher_text = bytearray([0] * (len(padded_plain_text) + 16))
+	numOfBlocks = len(padded_plain_text)/16
+
+	intermed_val = []
+	# For each block in the plaintext
+	for i in reversed(range(0, numOfBlocks)):
+		if i == numOfBlocks-1:
+			for x in range(0, numOfBlocks):
+				intermed_val += [109, 248, 217, 16, 189, 210, 101, 14, 249, 188, 137, 166, 173, 204, 51, 146]
+		else:
+			intermed_val = last_word_oracle(cipher_text)
+
+		for pt_block_index in reversed(range(0, BLOCK_LEN)):
+			XORed_val =  getBlock(i, intermed_val)[pt_block_index] ^ getBlock(i, cipher_text)[pt_block_index]
+			if XORed_val != getBlock(i, padded_plain_text)[pt_block_index]:
+				# try all values until it equals
+				for g in range(0, 256):
+					cipher_text[(BLOCK_LEN * i) + pt_block_index] = g
+					XORed_val =  getBlock(i, intermed_val)[pt_block_index] ^ getBlock(i, cipher_text)[pt_block_index]
+					if XORed_val == getBlock(i, padded_plain_text)[pt_block_index]:
+						break
+			else:
+				debug("jackpot")
+	
+	print base64.b64encode(cipher_text)
+
+
+
+# Return ith block of data (indexed from 0)
+def getBlock(i, data):
+	return data[i*BLOCK_LEN: (i+1)*16]
 
 def main():
 # Check if cookie was passed in, other use default
 	if( len(sys.argv) != 2 ):
-		print "Please provide cookie"
-		return
+		print "Please provide plaintext"
 
-	cookie = sys.argv[1]
+	plaintext = sys.argv[1]
 	# print sys.argv[1]
 	
-	last_word_oracle(cookie)
+	encrypt(plaintext)
 
 main()
 
-
-
-	
