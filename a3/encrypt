@@ -8,8 +8,8 @@ import math
 
 # Defaults
 BLOCK_LEN = 16
-# URL = "http://ugster21.student.cs.uwaterloo.ca:4555/"
-URL = "http://localhost:4555"
+URL = "http://ugster21.student.cs.uwaterloo.ca:4555/"
+# URL = "http://localhost:4555"
 # cookie = "38UNph4moFFIGSxwCXpQO38JqNfjCcwK2iqhzQGjogipGx1QaEpv4+mwrS5sr+gt+whL4kC6Z7Y4zJQ8ITjm0g=="
 
 h = httplib2.Http(".cache")
@@ -165,8 +165,8 @@ def encrypt(plaintext):
 			else:
 				debug("jackpot")
 	
-	print base64.b64encode(cipher_text)
-
+	print base64.b64encode("".join(map(chr, cipher_text)))
+    
 
 
 # Return ith block of data (indexed from 0)

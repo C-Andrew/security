@@ -13,7 +13,7 @@ URL = "http://localhost:4555"
 h = httplib2.Http(".cache")
 # Cookie: an unencoded cookie
 def GETwithCookie( cookie ):
-	cookie = base64.b64encode(cookie)
+	cookie = base64.b64encode(str(cookie))
 	return h.request(URL, "GET", headers={ "Cookie" : "user=" + cookie })
 
 # Used to hit the ugster server for the first time
