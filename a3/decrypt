@@ -7,8 +7,8 @@ import sys
 
 # Defaults
 BLOCK_LEN = 16
-URL = "http://ugster21.student.cs.uwaterloo.ca:4555/"
-# URL = "http://localhost:4555"
+# URL = "http://ugster21.student.cs.uwaterloo.ca:4555/"
+URL = "http://localhost:4555"
 
 h = httplib2.Http(".cache")
 # Cookie: an unencoded cookie
@@ -116,7 +116,7 @@ def decrypt_cookie(decoded_cookie, decoded_data):
 		for i in range(0, 16):
 			pt.append( r_block[i] ^ c_block[i] )
 
-	print pt
+	# print pt
 	print ''.join(chr(c) for c in pt)
 
 def main():
